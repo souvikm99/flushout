@@ -1,0 +1,23 @@
+project_id = "flushout"
+
+[api]
+enabled = true
+schemas = ["api"]
+extra_search_path = ["public", "extensions"]
+max_rows = 100
+
+[auth]
+enabled = true
+site_url = "http://localhost:8787"
+additional_redirect_urls = ["http://localhost:8787/auth/callback"]
+jwt_expiry = 3600
+enable_signup = true
+
+[auth.email]
+enable_signup = false
+
+[auth.external.github]
+enabled = false
+client_id = "env(SUPABASE_AUTH_GITHUB_CLIENT_ID)"
+secret = "env(SUPABASE_AUTH_GITHUB_SECRET)"
+redirect_uri = ""

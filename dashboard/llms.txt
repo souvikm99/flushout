@@ -1,0 +1,29 @@
+# Flushout
+
+> Flushout is a Python developer tool for privately relaying stdout and stderr to an authenticated web browser in real time. Streamed output is ephemeral and is not saved by Flushout.
+
+## Primary links
+
+- Website: https://flushout.online/
+- Python package: https://pypi.org/project/flushout/
+- Source code: https://github.com/souvikm99/flushout
+- Production release: https://github.com/souvikm99/flushout/releases/latest
+
+## Install
+
+`pip install flushout`
+
+## Basic use
+
+```python
+import flushout
+
+with flushout.stream(name="training-run"):
+    print("Hello from anywhere")
+```
+
+Interactive runs ask for the user's Flushout portal username and streaming password before output capture begins. The live URL is private to the authenticated account. Optional completion emails contain bounded success or failure metadata, never stdout, stderr, or tracebacks.
+
+## Privacy boundary
+
+Flushout relays live output through Cloudflare. The application does not intentionally persist streamed output in its database, object storage, analytics, logs, or backups. Output is visible in the receiving browser's memory and travels through Cloudflare's network, so users should not stream secrets or regulated data.
