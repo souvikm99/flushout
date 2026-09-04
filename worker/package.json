@@ -1,0 +1,22 @@
+{
+  "name": "flushout-worker",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "Ephemeral authenticated Flushout WebSocket relay",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "check": "wrangler deploy --dry-run --outdir /tmp/flushout-worker-dry-run",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "jose": "^6.1.0"
+  },
+  "devDependencies": {
+    "wrangler": "^4.36.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

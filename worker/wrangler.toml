@@ -1,0 +1,53 @@
+name = "flushout"
+main = "src/index.js"
+compatibility_date = "2026-09-03"
+workers_dev = true
+preview_urls = false
+
+[assets]
+directory = "../dashboard"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
+
+[[durable_objects.bindings]]
+name = "LIVE_RELAY"
+class_name = "LiveRelay"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["LiveRelay"]
+
+[[ratelimits]]
+name = "AUTH_RATE_LIMITER"
+namespace_id = "2001"
+
+  [ratelimits.simple]
+  limit = 10
+  period = 60
+
+[vars]
+APP_ORIGIN = "https://flushout.online"
+SUPABASE_URL = "https://raryjwhsbpnpjjbwfsmu.supabase.co"
+GITHUB_AUTH_ENABLED = "true"
+GOOGLE_AUTH_ENABLED = "false"
+EMAIL_AUTH_ENABLED = "true"
+ZOHO_SMTP_HOST = "smtp.zoho.in"
+ZOHO_SMTP_PORT = "465"
+NOTIFICATION_FROM_EMAIL = "hello@gitshorts.com"
+NOTIFICATION_FROM_NAME = "notification-flashout"
+TURNSTILE_SITE_KEY = "0x4AAAAAAEmwBAKbVdavmsa0"
+
+[secrets]
+required = [
+  "STREAM_PASSWORD_PEPPER",
+  "REALTIME_TICKET_SECRET",
+  "TURNSTILE_SECRET_KEY",
+  "SUPABASE_BROWSER_KEY",
+  "ZOHO_SMTP_USERNAME",
+  "ZOHO_SMTP_PASSWORD"
+]
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 0.05

@@ -1,0 +1,6 @@
+SUPABASE_BROWSER_KEY="use-the-local-publishable-browser-key"
+STREAM_PASSWORD_PEPPER="generate-a-local-random-value"
+REALTIME_TICKET_SECRET="generate-a-different-local-random-value"
+TURNSTILE_SECRET_KEY="leave-empty-for-local-development"
+ZOHO_SMTP_USERNAME="your-complete-zoho-mail-address"
+ZOHO_SMTP_PASSWORD="use-a-dedicated-zoho-app-password"

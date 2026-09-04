@@ -1,0 +1,10 @@
+User-agent: *
+Content-Signal: search=yes, ai-input=yes, ai-train=no, use=reference
+Allow: /
+Disallow: /auth/callback
+Disallow: /dashboard
+Disallow: /dashbord
+Disallow: /live/
+Disallow: /api/
+
+Sitemap: https://flushout.online/sitemap.xml
