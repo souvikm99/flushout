@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "flushout"
+version = "0.3.0"
+description = "Private ephemeral real-time Python output streaming"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.9"
+dependencies = [
+  "requests>=2.32,<3",
+  "websocket-client>=1.8,<2"
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Software Development :: Libraries :: Python Modules"
+]
+
+[project.urls]
+Homepage = "https://github.com/souvikm99/flushout"
+Repository = "https://github.com/souvikm99/flushout"
+Issues = "https://github.com/souvikm99/flushout/issues"
+
+[tool.setuptools.packages.find]
+include = ["flushout*"]
