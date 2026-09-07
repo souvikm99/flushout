@@ -1,10 +1,13 @@
+import { appendCachedOutput, readCache, writeCache } from "./stream-cache.mjs";
+
 (() => {
   "use strict";
 
   const app = document.querySelector("#app");
   const SESSION_KEY = "flushout.auth.v1";
   const VERIFIER_KEY = "flushout.pkce.verifier";
-  const MAX_TERMINAL_LINES = 2000;
+  const HEARTBEAT_INTERVAL_MS = 20_000;
+  const HEARTBEAT_TIMEOUT_MS = 45_000;
   const state = {
     config: null,
     providers: {},
@@ -14,12 +17,64 @@
     socket: null,
     reconnectTimer: null,
     reconnectAttempt: 0,
+    heartbeatTimer: null,
+    lastPongAt: 0,
     sessions: new Map(),
     selectedSession: null,
     lines: [],
+    cachedSessions: new Map(),
+    selectedStreamState: "idle",
+    cacheSaveTimer: null,
+    cacheAvailable: true,
     turnstileToken: null,
     emailNotice: "",
   };
+
+  function cacheOwnerId() {
+    return state.authUser?.id || state.profile?.id || null;
+  }
+
+  function loadStreamCache() {
+    const ownerId = cacheOwnerId();
+    if (!ownerId) return;
+    const cache = readCache(localStorage, ownerId);
+    state.cachedSessions = new Map(cache.sessions.map((session) => [session.id, session]));
+  }
+
+  function saveStreamCache(immediate = false) {
+    clearTimeout(state.cacheSaveTimer);
+    const ownerId = cacheOwnerId();
+    if (!ownerId) return;
+    const save = () => {
+      const previousAvailability = state.cacheAvailable;
+      const result = writeCache(localStorage, ownerId, { sessions: [...state.cachedSessions.values()] });
+      state.cacheAvailable = result.saved;
+      state.cachedSessions = new Map(result.cache.sessions.map((session) => [session.id, session]));
+      if (previousAvailability !== state.cacheAvailable) {
+        if (state.selectedSession) restoreSelectedLines();
+        render();
+      }
+    };
+    if (immediate) save();
+    else state.cacheSaveTimer = setTimeout(save, 100);
+  }
+
+  function ensureCachedSession(session) {
+    let cached = state.cachedSessions.get(session.id);
+    if (!cached) {
+      cached = { id: session.id, name: session.name || "Live session", started_at: session.started_at || new Date().toISOString(), ended_at: null, updated_at: Date.now(), last_sequence: -1, lines: [] };
+      state.cachedSessions.set(session.id, cached);
+    } else {
+      cached.name = session.name || cached.name;
+      cached.started_at = session.started_at || cached.started_at;
+      cached.updated_at = Date.now();
+    }
+    return cached;
+  }
+
+  function restoreSelectedLines() {
+    state.lines = state.cachedSessions.get(state.selectedSession)?.lines || [];
+  }
 
   function element(tag, className, text) {
     const node = document.createElement(tag);
@@ -203,6 +258,7 @@
   }
 
   async function signOut() {
+    saveStreamCache(true);
     closeSocket();
     if (state.auth?.access_token) {
       fetch(`${state.config.supabase_url}/auth/v1/logout`, {
@@ -214,6 +270,7 @@
     state.profile = null;
     state.authUser = null;
     state.sessions.clear();
+    state.cachedSessions.clear();
     history.replaceState({}, "", "/");
     render();
   }
@@ -232,7 +289,7 @@
     header.append(brand);
     if (state.auth) {
       const actions = element("div", "top-actions");
-      const privacy = element("span", "privacy-chip", "● not stored");
+      const privacy = element("span", "privacy-chip", "● not stored on server");
       const logout = element("button", "button ghost small", "Sign out");
       logout.type = "button";
       logout.addEventListener("click", signOut);
@@ -260,7 +317,7 @@
     const eyebrow = element("p", "eyebrow", "EPHEMERAL BY DESIGN");
     const title = element("h1", "hero");
     title.append("See your Python output ", element("span", "gradient-text", "anywhere."));
-    const intro = element("p", "lead", "Private live streaming through Cloudflare. Your output is relayed to your browser and never saved.");
+    const intro = element("p", "lead", "Private live streaming through Cloudflare. Servers do not save your output; this browser keeps received lines for up to 24 hours.");
     heroSection.append(eyebrow, title, intro);
     if (message) heroSection.append(element("p", "notice error", message));
     const options = element("section", "auth-options");
@@ -575,6 +632,22 @@
       }
     }
     section.append(grid);
+    const recent = [...state.cachedSessions.values()]
+      .filter((session) => !state.sessions.has(session.id))
+      .sort((left, right) => right.updated_at - left.updated_at);
+    if (recent.length) {
+      const recentHeading = element("div", "section-heading recent-heading");
+      recentHeading.append(element("h2", "section-title", "Saved in this browser"), element("span", "count", String(recent.length)));
+      const recentGrid = element("div", "session-grid");
+      for (const session of recent) {
+        const card = element("button", "session-card recent-session-card");
+        card.type = "button";
+        card.append(element("span", "saved-pill", "UP TO 24H"), element("strong", "session-card-name", session.name), element("span", "session-time", new Date(session.updated_at).toLocaleString([], { dateStyle: "short", timeStyle: "short" })));
+        card.addEventListener("click", () => selectSession(session.id));
+        recentGrid.append(card);
+      }
+      section.append(recentHeading, recentGrid);
+    }
     return section;
   }
 
@@ -582,7 +655,10 @@
     const main = element("main", "dashboard container");
     const welcome = element("section", "welcome");
     const copy = element("div");
-    copy.append(element("p", "eyebrow", `@${state.profile.username}`), element("h1", "page-title", "Live workspace"), element("p", "muted", "Output exists only while connected. Nothing is recorded."));
+    const retention = state.cacheAvailable
+      ? "Stream output stays on this device for up to 24 hours. Flushout does not store it on its servers."
+      : "Browser storage is unavailable, so output will last only until this page closes. Flushout does not store it on its servers.";
+    copy.append(element("p", "eyebrow", `@${state.profile.username}`), element("h1", "page-title", "Live workspace"), element("p", "muted", retention));
     const connection = element("span", "connection", state.socket?.readyState === WebSocket.OPEN ? "Connected" : "Connecting");
     connection.id = "connection-state";
     welcome.append(copy, connection);
@@ -613,20 +689,23 @@
   }
 
   function renderTerminal() {
-    const session = state.sessions.get(state.selectedSession) || { name: "Live session", id: state.selectedSession };
+    const session = state.sessions.get(state.selectedSession) || state.cachedSessions.get(state.selectedSession) || { name: "Live session", id: state.selectedSession };
     const main = element("main", "terminal-page container");
     const bar = element("div", "terminal-bar");
     const back = element("button", "button ghost small", "← Sessions");
     back.type = "button";
-    back.addEventListener("click", () => { if (state.socket?.readyState === WebSocket.OPEN) state.socket.send(JSON.stringify({ type: "unsubscribe" })); state.selectedSession = null; state.lines = []; history.pushState({}, "", "/dashboard"); render(); });
+    back.addEventListener("click", () => { if (state.socket?.readyState === WebSocket.OPEN) state.socket.send(JSON.stringify({ type: "unsubscribe" })); state.selectedSession = null; state.lines = []; state.selectedStreamState = "idle"; history.pushState({}, "", "/dashboard"); render(); });
     const title = element("div", "terminal-heading");
-    title.append(element("strong", "", session.name), element("span", "live-pill", "LIVE · NOT SAVED"));
+    const live = state.sessions.has(state.selectedSession);
+    const persistence = state.cacheAvailable ? "BROWSER-SAVED" : "MEMORY ONLY";
+    const status = state.selectedStreamState === "live" ? `LIVE · ${persistence}` : live ? `CONNECTING · ${persistence}` : `ENDED · ${persistence}`;
+    title.append(element("strong", "", session.name), element("span", live ? "live-pill" : "saved-pill", status));
     bar.append(back, title);
     const terminal = element("section", "terminal");
     terminal.id = "terminal-output";
     terminal.setAttribute("role", "log");
     terminal.setAttribute("aria-live", "off");
-    if (state.lines.length === 0) terminal.append(element("p", "terminal-hint", "Connected. Only new output will appear here—earlier output is not stored."));
+    if (state.lines.length === 0) terminal.append(element("p", "terminal-hint", live ? "Subscribing to live output…" : "No output from this session was received by this browser."));
     else for (const line of state.lines) appendRenderedLine(terminal, line);
     main.append(bar, terminal);
     shell(main);
@@ -640,31 +719,29 @@
 
   function appendOutput(message) {
     if (message.session_id !== state.selectedSession) return;
-    const chunks = message.content.split(/(?<=\n)/u);
-    for (const content of chunks) {
-      if (!content) continue;
-      state.lines.push({ content, stream: message.stream });
-    }
-    if (state.lines.length > MAX_TERMINAL_LINES) {
-      state.lines.splice(0, state.lines.length - MAX_TERMINAL_LINES);
-      state.lines.unshift({ content: "[flushout: older browser-only lines removed]\n", stream: "system" });
-      renderTerminal();
-      return;
-    }
+    const session = ensureCachedSession(state.sessions.get(message.session_id) || { id: message.session_id, name: "Live session" });
+    const result = appendCachedOutput(session, message);
+    if (result.duplicate) return;
+    state.lines = session.lines;
+    saveStreamCache();
     const terminal = document.querySelector("#terminal-output");
     if (!terminal) return;
     terminal.querySelector(".terminal-hint")?.remove();
-    for (const content of chunks) if (content) appendRenderedLine(terminal, { content, stream: message.stream });
+    if (result.missed || terminal.children.length + result.appended.length !== state.lines.length) {
+      terminal.replaceChildren();
+      for (const line of state.lines) appendRenderedLine(terminal, line);
+    } else for (const line of result.appended) appendRenderedLine(terminal, line);
     terminal.scrollTop = terminal.scrollHeight;
   }
 
   function selectSession(id) {
-    if (!state.sessions.has(id)) return;
+    if (!state.sessions.has(id) && !state.cachedSessions.has(id)) return;
     state.selectedSession = id;
-    state.lines = [];
+    state.selectedStreamState = state.sessions.has(id) ? "subscribing" : "ended";
+    restoreSelectedLines();
     history.pushState({}, "", `/live/${id}`);
     render();
-    if (state.socket?.readyState === WebSocket.OPEN) state.socket.send(JSON.stringify({ type: "subscribe", session_id: id }));
+    if (state.sessions.has(id) && state.socket?.readyState === WebSocket.OPEN) state.socket.send(JSON.stringify({ type: "subscribe", session_id: id }));
   }
 
   function wsUrl(path) {
@@ -682,12 +759,17 @@
       state.socket = socket;
       socket.addEventListener("open", () => {
         state.reconnectAttempt = 0;
+        state.lastPongAt = Date.now();
+        startHeartbeat(socket);
         const indicator = document.querySelector("#connection-state");
         if (indicator) indicator.textContent = "Connected";
-        if (state.selectedSession) socket.send(JSON.stringify({ type: "subscribe", session_id: state.selectedSession }));
+        if (state.selectedSession && state.sessions.has(state.selectedSession)) {
+          state.selectedStreamState = "subscribing";
+          socket.send(JSON.stringify({ type: "subscribe", session_id: state.selectedSession }));
+        }
       });
       socket.addEventListener("message", (event) => handleSocketMessage(event.data));
-      socket.addEventListener("close", () => scheduleReconnect());
+      socket.addEventListener("close", () => { if (state.socket === socket) scheduleReconnect(); });
       socket.addEventListener("error", () => socket.close());
     } catch { scheduleReconnect(); }
   }
@@ -695,31 +777,62 @@
   function handleSocketMessage(raw) {
     let message;
     try { message = JSON.parse(raw); } catch { return; }
-    if (message.type === "sessions") {
+    if (message.type === "pong") {
+      state.lastPongAt = Date.now();
+    } else if (message.type === "sessions") {
       state.sessions = new Map(message.items.map((item) => [item.id, item]));
+      for (const session of state.sessions.values()) ensureCachedSession(session);
       const pathSession = location.pathname.match(/^\/live\/([0-9a-f-]{36})$/u)?.[1];
-      if (pathSession && state.sessions.has(pathSession)) state.selectedSession = pathSession;
+      if (pathSession && (state.sessions.has(pathSession) || state.cachedSessions.has(pathSession))) state.selectedSession = pathSession;
+      if (state.selectedSession) restoreSelectedLines();
+      saveStreamCache();
       render();
-      if (state.selectedSession) state.socket.send(JSON.stringify({ type: "subscribe", session_id: state.selectedSession }));
+      if (state.selectedSession && state.sessions.has(state.selectedSession)) state.socket.send(JSON.stringify({ type: "subscribe", session_id: state.selectedSession }));
     } else if (message.type === "session_started") {
       state.sessions.set(message.session.id, message.session);
+      ensureCachedSession(message.session);
+      saveStreamCache();
       if (!state.selectedSession) render();
     } else if (message.type === "session_ended") {
       state.sessions.delete(message.session_id);
+      const cached = state.cachedSessions.get(message.session_id);
+      if (cached) { cached.ended_at = new Date().toISOString(); cached.updated_at = Date.now(); saveStreamCache(); }
       if (state.selectedSession === message.session_id) {
-        document.querySelector(".terminal-heading .live-pill")?.replaceChildren("ENDED · NOT SAVED");
+        state.selectedStreamState = "ended";
+        renderTerminal();
       } else render();
     } else if (message.type === "output") appendOutput(message);
+    else if (message.type === "subscribed" && state.selectedSession === message.session_id) {
+      state.selectedStreamState = "live";
+      renderTerminal();
+    }
     else if (message.type === "session_unavailable" && state.selectedSession === message.session_id) {
-      state.selectedSession = null;
-      history.replaceState({}, "", "/dashboard");
-      render();
+      state.sessions.delete(message.session_id);
+      state.selectedStreamState = "ended";
+      renderTerminal();
     }
   }
 
+  function startHeartbeat(socket) {
+    clearInterval(state.heartbeatTimer);
+    state.heartbeatTimer = setInterval(() => {
+      if (state.socket !== socket || socket.readyState !== WebSocket.OPEN) return;
+      if (Date.now() - state.lastPongAt > HEARTBEAT_TIMEOUT_MS) {
+        socket.close(4000, "heartbeat timeout");
+        return;
+      }
+      socket.send(JSON.stringify({ type: "ping" }));
+    }, HEARTBEAT_INTERVAL_MS);
+  }
+
   function scheduleReconnect() {
+    clearInterval(state.heartbeatTimer);
     state.socket = null;
     if (!state.auth) return;
+    if (state.selectedSession && state.sessions.has(state.selectedSession)) {
+      state.selectedStreamState = "subscribing";
+      renderTerminal();
+    }
     const indicator = document.querySelector("#connection-state");
     if (indicator) indicator.textContent = "Reconnecting";
     const delay = Math.min(30_000, 1000 * (2 ** state.reconnectAttempt++)) + Math.floor(Math.random() * 500);
@@ -728,6 +841,7 @@
 
   function closeSocket() {
     clearTimeout(state.reconnectTimer);
+    clearInterval(state.heartbeatTimer);
     if (state.socket) state.socket.close(1000, "signed out");
     state.socket = null;
   }
@@ -767,6 +881,8 @@
     if (location.pathname === "/dashbord") history.replaceState({}, "", "/dashboard");
     const id = location.pathname.match(/^\/live\/([0-9a-f-]{36})$/u)?.[1] || null;
     state.selectedSession = id;
+    state.selectedStreamState = id && state.sessions.has(id) ? "subscribing" : "ended";
+    restoreSelectedLines();
     render();
     if (id && state.socket?.readyState === WebSocket.OPEN) state.socket.send(JSON.stringify({ type: "subscribe", session_id: id }));
   });
@@ -781,11 +897,16 @@
       if (state.auth) {
         await loadProfile();
         if (state.auth) await loadAuthUser();
+        if (state.auth) loadStreamCache();
       }
       const pathSession = location.pathname.match(/^\/live\/([0-9a-f-]{36})$/u)?.[1];
       if (pathSession) state.selectedSession = pathSession;
+      if (state.selectedSession) restoreSelectedLines();
       render();
       if (state.auth && state.profile) connectDashboard();
     } catch (cause) { showFatal(cause); }
   })();
+
+  window.addEventListener("pagehide", () => saveStreamCache(true));
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") saveStreamCache(true); });
 })();

@@ -20,4 +20,4 @@ Only the latest release is supported with security updates.
 
 ## Service boundary
 
-Flushout is designed to relay output without intentionally persisting stream content. Output still traverses Cloudflare infrastructure and exists in producer and browser memory. Do not stream credentials, private keys, regulated data, or production customer information.
+Flushout is designed to relay output without intentionally persisting stream content on its servers. Output still traverses Cloudflare infrastructure, and the authenticated dashboard keeps received output in that browser's local storage for up to 24 hours. Do not stream credentials, private keys, regulated data, or production customer information.

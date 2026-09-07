@@ -4,7 +4,7 @@ Private, ephemeral Python output streaming. Run a script on one machine and watc
 
 Production dashboard: <https://flushout.online>
 
-**Flushout does not save output.** Log frames exist only in the producer, Cloudflare relay, and connected browser memory while the live WebSockets are open. Late viewers cannot replay earlier output.
+**Flushout servers do not save output.** Log frames exist only in the producer, Cloudflare relay, and the authenticated browser. The dashboard keeps the output it receives in that browser's local storage for up to 24 hours so refreshes and completed runs remain readable; this device-local history is not synced and can be cleared by the user or browser.
 
 ## User experience
 
@@ -66,7 +66,8 @@ Security issues should be reported privately through this repository's **Securit
 
 - Output still traverses Cloudflare infrastructure and appears in browser memory.
 - Opt-in completion emails contain run metadata and a bounded exception message, but never streamed output or tracebacks.
-- Refreshes, network interruptions, Worker deployments, and reconnects can lose lines.
+- The dashboard retains frames it has received for up to 24 hours in browser local storage. Frames emitted while that browser is disconnected cannot be recovered; detected sequence gaps are shown in the terminal.
+- Browser privacy modes, storage quotas, site-data clearing, or another device can make browser-saved history unavailable.
 - Do not stream credentials, private keys, regulated data, or production customer information.
 - Free infrastructure has quotas and no application SLA.
 
