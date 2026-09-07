@@ -1,6 +1,6 @@
 # Flushout Python SDK
 
-Flushout securely relays Python stdout/stderr to the authenticated owner's live dashboard. Output is ephemeral and is never saved by the service.
+Flushout securely relays Python stdout/stderr to the authenticated owner's live dashboard. The service does not save output on its servers; the receiving browser keeps its local copy for up to 24 hours.
 
 ```python
 import flushout
