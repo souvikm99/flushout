@@ -11,7 +11,7 @@
     "test": "node --test test/*.test.js"
   },
   "dependencies": {
-    "jose": "^6.1.0"
+    "jose": "^6.2.12"
   },
   "devDependencies": {
     "wrangler": "^4.36.0"
